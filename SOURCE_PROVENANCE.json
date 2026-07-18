@@ -1,0 +1,11 @@
+﻿{
+    "schemaVersion":  1,
+    "sourceCommit":  "ed1b83273d7b7b4c9ed82d74a762778cc5b80de8",
+    "sourceDirty":  false,
+    "sourceTreeHash":  "0bd31c9bee034977fedb437926d5951291372bd01858aaea75acd052ee547b04",
+    "sourceTreeHashAlgorithm":  "sha256(sorted sha256-plus-repo-relative-path records for selected source files)",
+    "publicStageInputHash":  "2999c65da9e732e07eb9ff53828f949aa16f05ccff1e95cda9de3740adee28ca",
+    "publicStageInputHashAlgorithm":  "sha256(sorted sha256-plus-repo-relative-path records for every selected stage input)",
+    "stagedUtc":  "2026-07-18T19:04:43.0522857+00:00",
+    "gitHistoryIncluded":  false
+}
