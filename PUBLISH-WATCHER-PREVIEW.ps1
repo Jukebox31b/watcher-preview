@@ -599,7 +599,7 @@ try {
     $manifest = [ordered]@{
         schemaVersion = 1
         product = "Watcher Preview"
-        version = "0.1.0-preview.1"
+        version = "0.1.0-preview.2"
         channel = "Preview"
         createdUtc = [DateTimeOffset]::UtcNow.ToString("O")
         source = [ordered]@{
@@ -662,7 +662,7 @@ try {
     $summary = [ordered]@{
         schemaVersion = 2
         product = "Watcher Preview"
-        version = "0.1.0-preview.1"
+        version = "0.1.0-preview.2"
         createdUtc = $manifest.createdUtc
         sourceCommit = $sourceCommit
         sourceDirty = $sourceDirty

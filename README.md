@@ -7,9 +7,9 @@ Preview behavior, formats, and compatibility may change.
 
 ## Judge Quick Start - No Rebuild
 
-**Release:** [Watcher Preview v0.1.0-preview.1](https://github.com/Jukebox31b/watcher-preview/releases/tag/v0.1.0-preview.1)
+**Release:** [Watcher Preview v0.1.0-preview.2](https://github.com/Jukebox31b/watcher-preview/releases/tag/v0.1.0-preview.2)
 
-**ZIP:** [WatcherPreview-win-x64.zip](https://github.com/Jukebox31b/watcher-preview/releases/download/v0.1.0-preview.1/WatcherPreview-win-x64.zip)
+**ZIP:** [WatcherPreview-win-x64.zip](https://github.com/Jukebox31b/watcher-preview/releases/download/v0.1.0-preview.2/WatcherPreview-win-x64.zip)
 
 1. Download the self-contained Windows x64 Preview ZIP from the release above.
 2. Verify the ZIP SHA-256 against
