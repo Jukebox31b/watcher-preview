@@ -25,11 +25,20 @@ The publisher invokes the packaged main executable with offline
 runs that regression executable against the packaged
 `DcsWatcherV2.Stage3Intake.exe`.
 
+These are two separate gates. The **Packaged Preview offline application
+suite** runs from the packaged `DcsWatcherV2.exe` and currently requires
+203/203 checks. Its 17/17 `command-cancellation` subsuite is included within
+that 203 total. The **Stage 3 provenance and intake regression suite** is a
+separate 295/295 fixture run against the packaged intake executable. The 17
+subsuite checks must never be added to either top-level total.
+
 Both commands are bounded. The packaged release test and regression build each
 have a 15-minute limit; the full Stage3 regression/fault run has a 30-minute
 limit. A timeout terminates the process tree and fails publication.
 
-The Stage3 gate requires the authoritative 295-test baseline to report 295
+The packaged application gate requires the reviewed 203-test candidate
+baseline, including its exact 17-test command-cancellation subsuite, to pass
+with zero failures. The Stage3 gate requires the authoritative 295-test baseline to report 295
 passed and zero failed. If the suite intentionally gains or removes tests, the
 publisher's expected total must be reviewed and changed to the new exact total;
 publication does not accept an arbitrary nonzero count. Fault evidence must

@@ -28,6 +28,8 @@ $summaryPath = Join-Path $artifactRoot "$packageName.release-summary.json"
 $releaseTestPath = Join-Path $artifactRoot "$packageName.release-test.json"
 $regressionEvidencePath = Join-Path $artifactRoot "$packageName.stage3-regression.json"
 $faultEvidencePath = Join-Path $artifactRoot "$packageName.stage3-fault.json"
+$expectedPackagedReleaseTestTotal = 203
+$expectedCommandCancellationTotal = 17
 $expectedStage3RegressionTotal = 295
 $evidenceStagingRoot = Join-Path ([IO.Path]::GetTempPath()) ("WatcherReleaseEvidence-" + [Guid]::NewGuid().ToString("N"))
 $regressionBuildRoot = Join-Path $evidenceStagingRoot "stage3-regression-build"
@@ -266,7 +268,44 @@ function Invoke-PackagedReleaseTest([string]$Executable, [string]$EvidencePath) 
     if ($total -ne ($passed + $failed)) {
         Fail "packaged offline release-test counts are inconsistent"
     }
-    return [pscustomobject]@{ Total = $total; Passed = $passed; Failed = $failed }
+    if ($total -ne $expectedPackagedReleaseTestTotal) {
+        Fail "packaged offline release-test total is $total; expected the reviewed $expectedPackagedReleaseTestTotal-test candidate baseline"
+    }
+
+    if ($null -eq $result.PSObject.Properties["Suites"]) {
+        Fail "release-test JSON is missing property 'Suites'"
+    }
+    $suiteSummaries = @($result.Suites | ForEach-Object {
+        if ($_.Name -isnot [string] -or [string]::IsNullOrWhiteSpace($_.Name)) {
+            Fail "release-test JSON contains a suite without a valid name"
+        }
+        $suitePassed = Get-EvidenceCount $_.Passed "$($_.Name).Passed"
+        $suiteFailed = Get-EvidenceCount $_.Failed "$($_.Name).Failed"
+        [ordered]@{
+            name = $_.Name
+            total = $suitePassed + $suiteFailed
+            passed = $suitePassed
+            failed = $suiteFailed
+        }
+    })
+    if (($suiteSummaries | ForEach-Object { $_["total"] } | Measure-Object -Sum).Sum -ne $total) {
+        Fail "release-test suite totals do not equal the top-level total"
+    }
+    $commandCancellation = @($suiteSummaries | Where-Object { $_["name"] -eq "command-cancellation" })
+    if ($commandCancellation.Count -ne 1 -or
+        $commandCancellation[0]["total"] -ne $expectedCommandCancellationTotal -or
+        $commandCancellation[0]["passed"] -ne $expectedCommandCancellationTotal -or
+        $commandCancellation[0]["failed"] -ne 0) {
+        Fail "packaged release-test must include the reviewed $expectedCommandCancellationTotal/$expectedCommandCancellationTotal command-cancellation subset"
+    }
+
+    return [pscustomobject]@{
+        Total = $total
+        Passed = $passed
+        Failed = $failed
+        Suites = $suiteSummaries
+        CommandCancellation = $commandCancellation[0]
+    }
 }
 
 function Invoke-PackagedStage3Regression(
@@ -635,6 +674,10 @@ try {
         mainApplicationDllSha256 = (Get-FileHash -LiteralPath (Join-Path $outputRoot "DcsWatcherV2.dll") -Algorithm SHA256).Hash.ToLowerInvariant()
         intakeExecutableSha256 = (Get-FileHash -LiteralPath $intakeExecutable -Algorithm SHA256).Hash.ToLowerInvariant()
         releaseTest = [ordered]@{
+            name = "Packaged Preview offline application suite"
+            executionTarget = "Packaged DcsWatcherV2.exe"
+            command = "DcsWatcherV2.exe --release-test <json-path>"
+            scope = "Runs the Watcher application release suites from the packaged executable. Subsuite counts are included in, not additional to, the top-level total."
             path = [IO.Path]::GetFileName($releaseTestPath)
             fileName = [IO.Path]::GetFileName($releaseTestPath)
             sizeBytes = $releaseTestEvidence.Length
@@ -642,8 +685,14 @@ try {
             total = $releaseTestTotals.Total
             passed = $releaseTestTotals.Passed
             failed = $releaseTestTotals.Failed
+            includedSuites = $releaseTestTotals.Suites
+            commandCancellationSubset = $releaseTestTotals.CommandCancellation
         }
         stage3Regression = [ordered]@{
+            name = "Stage 3 provenance and intake regression suite"
+            executionTarget = "Regression runner exercising the packaged DcsWatcherV2.Stage3Intake.exe"
+            command = "DcsWatcherV2.Stage3Regression.exe <regression-json> <fault-json> <packaged-intake-executable>"
+            scope = "Runs Stage 2 and Stage 3 provenance, verifier, replay, lineage, and fault fixtures against the packaged intake executable. It is separate from the packaged Preview offline application suite."
             path = [IO.Path]::GetFileName($regressionEvidencePath)
             fileName = [IO.Path]::GetFileName($regressionEvidencePath)
             sizeBytes = $regressionEvidence.Length

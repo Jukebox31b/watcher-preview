@@ -32,7 +32,7 @@ public sealed class WorkflowEditorControl : UserControl
         AccessibleName = "Workflow profile editor";
         PopulateChoices();
         var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-        var content = new TableLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, Dock = DockStyle.Top, Padding = new Padding(12), MaximumSize = new Size(1180, 0) };
+        var content = new TableLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, Dock = DockStyle.Top, Padding = new Padding(12) };
         content.Controls.Add(BuildActions());
         content.Controls.Add(Group("Project", ("Profile name", _name), ("Description", _description), (string.Empty, _enabled)));
         content.Controls.Add(Group("Report Source", ("Source adapter", _reportAdapter), ("Expected repository", _repository), ("Expected branch", _branch)));
@@ -133,7 +133,7 @@ public sealed class WorkflowEditorControl : UserControl
     {
         var group = new GroupBox { Text = title, AutoSize = true, Dock = DockStyle.Top, Padding = new Padding(10), Margin = new Padding(0, 0, 0, 10) };
         var table = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Top, ColumnCount = 2, Padding = new Padding(2) };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 210));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (var i = 0; i < rows.Length; i++)
         {

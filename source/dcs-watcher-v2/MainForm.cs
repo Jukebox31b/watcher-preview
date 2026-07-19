@@ -38,6 +38,7 @@ public partial class MainForm : Form
     private DemoRunResult? _lastAcceptedDemoResult;
     private int _nextDemoAction;
     private bool _adjustingCommandBar;
+    private bool _initialWindowBoundsApplied;
 
     public MainForm(bool demoMode = false)
     {
@@ -57,6 +58,8 @@ public partial class MainForm : Form
 
     private void MainForm_Load(object? sender, EventArgs e)
     {
+        ApplyDpiAwareShellMetrics(applyInitialWindowBounds: true);
+
         if (_demoMode)
         {
             InitializeDemoState();
@@ -180,7 +183,7 @@ public partial class MainForm : Form
             AdjustCommandBarLayout();
         };
         commandBar.SizeChanged += (_, _) => AdjustCommandBarLayout();
-        DpiChanged += (_, _) => AdjustCommandBarLayout();
+        DpiChanged += (_, _) => BeginInvoke(() => ApplyDpiAwareShellMetrics(applyInitialWindowBounds: false));
         mainTabs.SelectedIndexChanged += (_, _) =>
         {
             if (!_demoMode) _preferences.LastSelectedPage = mainTabs.SelectedTab?.Text ?? "Overview";
@@ -230,6 +233,41 @@ public partial class MainForm : Form
             _adjustingCommandBar = false;
         }
     }
+
+    private void ApplyDpiAwareShellMetrics(bool applyInitialWindowBounds)
+    {
+        commandBar.Padding = new Padding(
+            LogicalToDeviceUnits(8),
+            LogicalToDeviceUnits(4),
+            LogicalToDeviceUnits(8),
+            LogicalToDeviceUnits(4));
+        commandBar.Height = LogicalToDeviceUnits(40);
+        statusBar.Height = LogicalToDeviceUnits(24);
+        mainTabs.Padding = new Point(LogicalToDeviceUnits(12), LogicalToDeviceUnits(5));
+
+        var workingArea = Screen.FromControl(this).WorkingArea;
+        var minimumWidth = Math.Min(LogicalToDeviceUnits(760), workingArea.Width);
+        var minimumHeight = Math.Min(LogicalToDeviceUnits(520), workingArea.Height);
+        MinimumSize = new Size(minimumWidth, minimumHeight);
+
+        if (applyInitialWindowBounds && !_initialWindowBoundsApplied)
+        {
+            _initialWindowBoundsApplied = true;
+            var desiredWidth = LogicalToDeviceUnits(1180);
+            var desiredHeight = LogicalToDeviceUnits(760);
+            var maximumWidth = Math.Max(minimumWidth, (int)Math.Round(workingArea.Width * 0.92));
+            var maximumHeight = Math.Max(minimumHeight, (int)Math.Round(workingArea.Height * 0.90));
+            Size = new Size(
+                Math.Min(desiredWidth, maximumWidth),
+                Math.Min(desiredHeight, maximumHeight));
+            CenterToScreen();
+        }
+
+        AdjustCommandBarLayout();
+    }
+
+    internal void ApplyShellMetricsForSelfTest() =>
+        ApplyDpiAwareShellMetrics(applyInitialWindowBounds: false);
 
     private void CreateRuntimeAfterSafetyChecks()
     {

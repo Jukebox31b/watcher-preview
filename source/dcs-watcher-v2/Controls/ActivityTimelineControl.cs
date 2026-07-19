@@ -7,6 +7,14 @@ public sealed class ActivityTimelineControl : UserControl
     private readonly ComboBox _stageFilter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
     private readonly TextBox _search = new() { Width = 240, PlaceholderText = "Filter activity" };
     private readonly DataGridView _grid = new();
+    private readonly FlowLayoutPanel _bar = new()
+    {
+        Dock = DockStyle.Top,
+        AutoSize = true,
+        FlowDirection = FlowDirection.LeftToRight,
+        WrapContents = true,
+        Padding = new Padding(8, 7, 8, 4)
+    };
     private IReadOnlyList<ActivityTimelineItem> _items = [];
 
     public ActivityTimelineControl()
@@ -18,10 +26,9 @@ public sealed class ActivityTimelineControl : UserControl
         _stageFilter.SelectedIndexChanged += (_, _) => RefreshRows();
         _search.TextChanged += (_, _) => RefreshRows();
 
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(8, 7, 8, 4), WrapContents = false };
-        bar.Controls.Add(new Label { Text = "Stage", AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
-        bar.Controls.Add(_stageFilter);
-        bar.Controls.Add(_search);
+        _bar.Controls.Add(new Label { Text = "Stage", AutoSize = true, Margin = new Padding(0, 6, 6, 0) });
+        _bar.Controls.Add(_stageFilter);
+        _bar.Controls.Add(_search);
 
         _grid.Dock = DockStyle.Fill;
         _grid.ReadOnly = true;
@@ -44,7 +51,8 @@ public sealed class ActivityTimelineControl : UserControl
         _grid.Columns[4].FillWeight = 16;
 
         Controls.Add(_grid);
-        Controls.Add(bar);
+        Controls.Add(_bar);
+        HandleCreated += (_, _) => ApplyDpiMetrics();
     }
 
     public void SetItems(IReadOnlyList<ActivityTimelineItem> items)
@@ -66,4 +74,19 @@ public sealed class ActivityTimelineControl : UserControl
             _grid.Rows.Add(item.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"), item.Stage, item.Title, item.Detail, item.Result);
         }
     }
+
+    protected override void OnDpiChangedAfterParent(EventArgs e)
+    {
+        base.OnDpiChangedAfterParent(e);
+        ApplyDpiMetrics();
+    }
+
+    private void ApplyDpiMetrics()
+    {
+        if (!IsHandleCreated) return;
+        _stageFilter.Width = ScaleLogical(150);
+        _search.Width = ScaleLogical(240);
+    }
+
+    private int ScaleLogical(int value) => (int)Math.Round(value * DeviceDpi / 96D);
 }

@@ -4,14 +4,16 @@ namespace DcsWatcherV2.Controls;
 
 public sealed class ProvenanceDetailsControl : UserControl
 {
+    private readonly SplitContainer _split = new() { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal };
     private readonly ListView _details = new();
     private readonly TextBox _artifacts = new();
+    private int _logicalSplitterDistance = 330;
+    private bool _applyingDpiMetrics;
 
     public ProvenanceDetailsControl()
     {
         Dock = DockStyle.Fill;
         AccessibleName = "Transaction evidence and provenance";
-        var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 330, SplitterWidth = 6 };
         _details.Dock = DockStyle.Fill;
         _details.View = View.Details;
         _details.FullRowSelect = true;
@@ -23,10 +25,20 @@ public sealed class ProvenanceDetailsControl : UserControl
         _artifacts.ReadOnly = true;
         _artifacts.ScrollBars = ScrollBars.Vertical;
         _artifacts.BackColor = SystemColors.Window;
-        _artifacts.Font = new Font(FontFamily.GenericMonospace, 9F);
-        split.Panel1.Controls.Add(_details);
-        split.Panel2.Controls.Add(_artifacts);
-        Controls.Add(split);
+        _artifacts.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
+        _split.Panel1.Controls.Add(_details);
+        _split.Panel2.Controls.Add(_artifacts);
+        Controls.Add(_split);
+        HandleCreated += (_, _) => ApplyDpiMetrics();
+        SizeChanged += (_, _) => ApplyDpiMetrics();
+        _split.SplitterMoved += (_, _) =>
+        {
+            if (!_applyingDpiMetrics && DeviceDpi > 0)
+            {
+                _logicalSplitterDistance = (int)Math.Round(_split.SplitterDistance * 96D / DeviceDpi);
+            }
+        };
+        _details.SizeChanged += (_, _) => ResizeColumns();
     }
 
     public void ShowAudit(AppState state, string profileName, string profileHash, string artifacts)
@@ -58,4 +70,44 @@ public sealed class ProvenanceDetailsControl : UserControl
         item.SubItems.Add(string.IsNullOrWhiteSpace(value) ? "Not available" : value);
         _details.Items.Add(item);
     }
+
+    protected override void OnDpiChangedAfterParent(EventArgs e)
+    {
+        base.OnDpiChangedAfterParent(e);
+        ApplyDpiMetrics();
+    }
+
+    private void ApplyDpiMetrics()
+    {
+        if (!IsHandleCreated || _split.Height <= 0) return;
+
+        _applyingDpiMetrics = true;
+        try
+        {
+            _split.SplitterWidth = ScaleLogical(6);
+            _split.Panel1MinSize = ScaleLogical(140);
+            _split.Panel2MinSize = ScaleLogical(120);
+            var maximum = _split.Height - _split.Panel2MinSize - _split.SplitterWidth;
+            if (maximum >= _split.Panel1MinSize)
+            {
+                _split.SplitterDistance = Math.Clamp(ScaleLogical(_logicalSplitterDistance), _split.Panel1MinSize, maximum);
+            }
+            ResizeColumns();
+        }
+        finally
+        {
+            _applyingDpiMetrics = false;
+        }
+    }
+
+    private void ResizeColumns()
+    {
+        if (_details.Columns.Count != 2 || _details.ClientSize.Width <= 0) return;
+        var available = Math.Max(360, _details.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 6);
+        var labelWidth = Math.Max(150, (int)Math.Round(available * 0.28));
+        _details.Columns[0].Width = labelWidth;
+        _details.Columns[1].Width = Math.Max(200, available - labelWidth);
+    }
+
+    private int ScaleLogical(int value) => (int)Math.Round(value * DeviceDpi / 96D);
 }

@@ -11,6 +11,12 @@ public sealed class OverviewControl : UserControl
     private readonly Label _warning = ValueLabel();
     private readonly Label _lastSuccess = ValueLabel();
     private readonly Label _nextPoll = ValueLabel();
+    private readonly TableLayoutPanel _summaryLayout = new()
+    {
+        Dock = DockStyle.Fill,
+        ColumnCount = 2,
+        RowCount = 7
+    };
     private readonly DataGridView _activity = CreateGrid();
     private readonly Button _collapseSummary = new()
     {
@@ -26,6 +32,8 @@ public sealed class OverviewControl : UserControl
         AccessibleName = "Toggle recent activity",
         AccessibleDescription = "Hides the recent activity section."
     };
+    private int _logicalSplitterDistance = 245;
+    private bool _applyingDpiMetrics;
 
     public OverviewControl()
     {
@@ -36,7 +44,16 @@ public sealed class OverviewControl : UserControl
         _split.Panel1.Controls.Add(BuildSummary());
         _split.Panel2.Controls.Add(BuildActivity());
         Controls.Add(_split);
-        _split.SplitterMoved += (_, _) => SplitterDistanceChanged?.Invoke(this, EventArgs.Empty);
+        HandleCreated += (_, _) => ApplyDpiMetrics();
+        SizeChanged += (_, _) => ApplyDpiMetrics();
+        _split.SplitterMoved += (_, _) =>
+        {
+            if (!_applyingDpiMetrics && DeviceDpi > 0)
+            {
+                _logicalSplitterDistance = (int)Math.Round(_split.SplitterDistance * 96D / DeviceDpi);
+            }
+            SplitterDistanceChanged?.Invoke(this, EventArgs.Empty);
+        };
         _collapseSummary.Click += (_, _) =>
         {
             _split.Panel1Collapsed = !_split.Panel1Collapsed;
@@ -57,13 +74,12 @@ public sealed class OverviewControl : UserControl
 
     public int SplitterDistance
     {
-        get => _split.SplitterDistance;
+        get => DeviceDpi <= 0 ? _logicalSplitterDistance :
+            (int)Math.Round(_split.SplitterDistance * 96D / DeviceDpi);
         set
         {
-            if (value > _split.Panel1MinSize && value < Height - _split.Panel2MinSize)
-            {
-                _split.SplitterDistance = value;
-            }
+            _logicalSplitterDistance = value;
+            ApplyDpiMetrics();
         }
     }
 
@@ -92,17 +108,17 @@ public sealed class OverviewControl : UserControl
 
     private Control BuildSummary()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7, Padding = new Padding(14) };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        AddRow(root, 0, "Operating state", _state);
-        AddRow(root, 1, "Profile", _profile);
-        AddRow(root, 2, "Transaction pipeline", _pipeline);
-        AddRow(root, 3, "Warnings", _warning);
-        AddRow(root, 4, "Last success", _lastSuccess);
-        AddRow(root, 5, "Next poll", _nextPoll);
-        root.Controls.Add(_collapseSummary, 1, 6);
-        return root;
+        _summaryLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        _summaryLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        AddRow(_summaryLayout, 0, "Operating state", _state);
+        AddRow(_summaryLayout, 1, "Profile", _profile);
+        AddRow(_summaryLayout, 2, "Transaction pipeline", _pipeline);
+        AddRow(_summaryLayout, 3, "Warnings", _warning);
+        AddRow(_summaryLayout, 4, "Last success", _lastSuccess);
+        AddRow(_summaryLayout, 5, "Next poll", _nextPoll);
+        _summaryLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _summaryLayout.Controls.Add(_collapseSummary, 1, 6);
+        return _summaryLayout;
     }
 
     private Control BuildActivity()
@@ -120,13 +136,64 @@ public sealed class OverviewControl : UserControl
 
     private static void AddRow(TableLayoutPanel panel, int row, string name, Control value)
     {
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 14.28F));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         panel.Controls.Add(new Label { Text = name, AutoSize = true, Anchor = AnchorStyles.Left, ForeColor = Color.DimGray }, 0, row);
-        value.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        value.Dock = DockStyle.Fill;
         panel.Controls.Add(value, 1, row);
     }
 
-    private static Label ValueLabel(string? accessibleName = null) => new() { AccessibleName = accessibleName, AutoEllipsis = true, AutoSize = false, Height = 24, TextAlign = ContentAlignment.MiddleLeft };
+    private static Label ValueLabel(string? accessibleName = null) => new()
+    {
+        AccessibleName = accessibleName,
+        AutoEllipsis = true,
+        AutoSize = false,
+        TextAlign = ContentAlignment.MiddleLeft
+    };
+
+    protected override void OnDpiChangedAfterParent(EventArgs e)
+    {
+        base.OnDpiChangedAfterParent(e);
+        ApplyDpiMetrics();
+    }
+
+    private void ApplyDpiMetrics()
+    {
+        if (Height <= 0) return;
+
+        _applyingDpiMetrics = true;
+        try
+        {
+            _summaryLayout.Padding = new Padding(ScaleLogical(14));
+            for (var row = 0; row < 6; row++)
+            {
+                _summaryLayout.RowStyles[row].Height = ScaleLogical(30);
+            }
+            foreach (var label in new[] { _state, _profile, _pipeline, _warning, _lastSuccess, _nextPoll })
+            {
+                label.MinimumSize = new Size(0, label.Font.Height + ScaleLogical(4));
+            }
+            var splitterWidth = ScaleLogical(6);
+            var panel1MinSize = ScaleLogical(120);
+            var panel2MinSize = ScaleLogical(120);
+            if (_split.Height < panel1MinSize + panel2MinSize + splitterWidth) return;
+
+            _split.SplitterWidth = splitterWidth;
+            _split.Panel1MinSize = panel1MinSize;
+            _split.Panel2MinSize = panel2MinSize;
+            var requested = ScaleLogical(_logicalSplitterDistance);
+            var maximum = _split.Height - _split.Panel2MinSize - _split.SplitterWidth;
+            if (maximum >= _split.Panel1MinSize)
+            {
+                _split.SplitterDistance = Math.Clamp(requested, _split.Panel1MinSize, maximum);
+            }
+        }
+        finally
+        {
+            _applyingDpiMetrics = false;
+        }
+    }
+
+    private int ScaleLogical(int value) => (int)Math.Round(value * DeviceDpi / 96D);
 
     private static DataGridView CreateGrid()
     {

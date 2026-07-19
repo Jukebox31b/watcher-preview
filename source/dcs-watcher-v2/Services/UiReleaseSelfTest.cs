@@ -14,10 +14,12 @@ public static class UiReleaseSelfTest
         using var form = new MainForm(demoMode: true);
         var toolStrip = form.Controls.OfType<ToolStrip>().Single(strip => strip.Items.OfType<ToolStripButton>().Any(item => item.Text == "Stop"));
         var tabs = form.Controls.OfType<TabControl>().Single();
+        var statusStrip = form.Controls.OfType<StatusStrip>().Single();
         form.CreateControl();
         _ = form.Handle;
         _ = toolStrip.Handle;
         var nativeDpi = checked((int)GetDpiForWindow(form.Handle));
+        form.ApplyShellMetricsForSelfTest();
 
         Check($"WinForms uses PerMonitorV2 visual environment at {nativeDpi} DPI",
             Application.RenderWithVisualStyles &&
@@ -27,7 +29,8 @@ public static class UiReleaseSelfTest
             form.DeviceDpi == nativeDpi &&
             toolStrip.DeviceDpi == nativeDpi);
         Check("Form has no form-level scrollbar", !form.AutoScroll);
-        Check("Compact minimum is 900x600", form.MinimumSize == new Size(900, 600));
+        Check("Compact minimum is DPI-scaled from 760x520",
+            form.MinimumSize == new Size(Scale(760, nativeDpi), Scale(520, nativeDpi)));
         Check("Five operational pages are present", tabs.TabPages.Cast<TabPage>().Select(page => page.Text).SequenceEqual(["Overview", "Workflow", "Activity", "Evidence", "Diagnostics"]));
         Check("Stop remains outside overflow", toolStrip.Items.OfType<ToolStripButton>().Single(item => item.Text == "Stop").Overflow == ToolStripItemOverflow.Never);
         Check("Pause remains outside overflow", toolStrip.Items.OfType<ToolStripButton>().Single(item => item.Text == "Pause").Overflow == ToolStripItemOverflow.Never);
@@ -52,17 +55,18 @@ public static class UiReleaseSelfTest
         var emergencyPause = toolStrip.Items.OfType<ToolStripButton>().Single(item => item.Text == "Pause");
         var more = toolStrip.Items.OfType<ToolStripDropDownButton>().Single(item => item.AccessibleName == "More actions");
         Check("Demo hides the irrelevant Start control", !start.Available);
-        Check("Required demo command items cannot overflow",
+        Check("Safety-critical demo commands cannot overflow",
             new ToolStripItem[]
             {
-                toolStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Profile"),
-                toolStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Active workflow profile"),
                 toolStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Operating state"),
                 runOnce,
                 stop,
                 emergencyPause,
                 more
             }.All(item => item.Overflow == ToolStripItemOverflow.Never));
+        Check("Profile controls may use compact command-bar overflow",
+            toolStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Profile").Overflow == ToolStripItemOverflow.AsNeeded &&
+            toolStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Active workflow profile").Overflow == ToolStripItemOverflow.AsNeeded);
         Check("Demo disables no-op stop controls without inhibiting Run Once",
             !stop.Enabled &&
             !emergencyPause.Enabled &&
@@ -80,6 +84,71 @@ public static class UiReleaseSelfTest
                 !string.IsNullOrWhiteSpace(item.AccessibleName) &&
                 !string.IsNullOrWhiteSpace(item.AccessibleDescription)));
 
+        using var setup = new FirstRunSetupForm(new ProfileService(Path.Combine(
+            Path.GetTempPath(),
+            "DcsWatcherV2UiSelfTest",
+            Guid.NewGuid().ToString("N"))));
+        setup.CreateControl();
+        _ = setup.Handle;
+        setup.ApplyLayoutForSelfTest();
+        setup.Size = setup.MinimumSize;
+        setup.PerformLayout();
+        var setupControls = Descendants(setup).ToArray();
+        var setupNavigation = setupControls.OfType<FlowLayoutPanel>()
+            .Single(panel => panel.AccessibleName == "Setup navigation");
+        var setupButtons = setupNavigation.Controls.OfType<Button>().ToArray();
+        Check("Setup navigation sizes itself around every button",
+            setupNavigation.AutoSize &&
+            setupButtons.Length == 3 &&
+            setupButtons.All(button => setupNavigation.ClientRectangle.Contains(button.Bounds)) &&
+            setupButtons.SelectMany((button, index) => setupButtons.Skip(index + 1).Select(other => (button, other)))
+                .All(pair => !pair.button.Bounds.IntersectsWith(pair.other.Bounds)));
+
+        var setupPages = setupControls.OfType<TabControl>().Single();
+        Check("Setup wizard minimum is DPI-scaled from 700x560",
+            setup.MinimumSize == new Size(Scale(700, nativeDpi), Scale(560, nativeDpi)));
+        setup.SelectPageForSelfTest(setupPages.TabCount - 1);
+        setupNavigation.PerformLayout();
+        var createButton = setupButtons.SingleOrDefault(button => button.Text == "Create disabled profile");
+        Check("Setup review keeps the long create button inside the footer",
+            createButton is not null &&
+            setupNavigation.ClientRectangle.Contains(createButton.Bounds));
+
+        var setupChoices = setupControls.OfType<ComboBox>().ToArray();
+        Check("Every setup choice exposes four documented options",
+            setupChoices.Length == 4 &&
+            setupChoices.All(combo => combo.Items.Count == 4 && !string.IsNullOrWhiteSpace(combo.AccessibleDescription)));
+        Check("Every setup option provides a distinct plain-language explanation",
+            setupChoices.All(combo =>
+            {
+                var parent = combo.Parent;
+                if (parent is null) return false;
+                var explanation = parent.Controls.OfType<Label>()
+                    .SingleOrDefault(label => label.AccessibleName?.EndsWith("option explanation", StringComparison.Ordinal) == true);
+                if (explanation is null) return false;
+                var descriptions = new HashSet<string>(StringComparer.Ordinal);
+                for (var index = 0; index < combo.Items.Count; index++)
+                {
+                    combo.SelectedIndex = index;
+                    if (!explanation.Text.StartsWith("What this option does: ", StringComparison.Ordinal) ||
+                        string.IsNullOrWhiteSpace(explanation.AccessibleDescription)) return false;
+                    descriptions.Add(explanation.Text);
+                }
+                return descriptions.Count == combo.Items.Count;
+            }));
+        setup.SelectPageForSelfTest(2);
+        var selectedSetupPage = setupPages.TabPages[2];
+        var visibleChoice = selectedSetupPage.Controls.Cast<Control>()
+            .SelectMany(Descendants)
+            .OfType<ComboBox>()
+            .Single();
+        var visibleExplanation = visibleChoice.Parent!.Controls.OfType<Label>()
+            .Single(label => label.AccessibleName?.EndsWith("option explanation", StringComparison.Ordinal) == true);
+        Check("Setup option explanation uses a fluid full-width layout",
+            visibleChoice.Parent is TableLayoutPanel { AutoSize: true } &&
+            visibleExplanation.AutoSize &&
+            visibleExplanation.Text.StartsWith("What this option does: ", StringComparison.Ordinal));
+
         var overview = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "Overview");
         var pipeline = Descendants(overview).OfType<Label>().Single(label => label.AccessibleName == "Transaction pipeline");
         Check("Demo pipeline summary is compact with full accessible meaning",
@@ -95,6 +164,18 @@ public static class UiReleaseSelfTest
             overviewCollapseButtons.All(HasAccessibilityMetadata) &&
             overviewControls.OfType<DataGridView>().Single().AccessibleName == "Recent activity grid" &&
             HasAccessibilityMetadata(overviewControls.OfType<DataGridView>().Single()));
+        var overviewSummaryValues = overviewControls.OfType<Label>()
+            .Where(label => label.Text is "Demo" or "Build Week Demo" or "Fixture -> approval -> test sink")
+            .ToArray();
+        var overviewSummaryLayout = overviewSummaryValues.First().Parent as TableLayoutPanel;
+        Check("Overview summary values reserve readable DPI-aware heights",
+            overviewSummaryValues.All(label =>
+                label.MinimumSize.Height >= label.Font.Height));
+        Check("Overview summary uses explicit DPI-aware text rows",
+            overviewSummaryLayout is not null &&
+            overviewSummaryLayout.RowStyles.Cast<RowStyle>().Take(6).All(style =>
+                style.SizeType == SizeType.Absolute &&
+                style.Height >= overviewSummaryValues[0].Font.Height));
 
         var diagnostics = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "Diagnostics");
         var diagnosticControls = Descendants(diagnostics).ToArray();
@@ -105,9 +186,18 @@ public static class UiReleaseSelfTest
             HasAccessibilityMetadata(diagnosticControls.OfType<ListView>().Single()) &&
             diagnosticControls.OfType<TextBox>().Single().AccessibleName == "Diagnostic log" &&
             HasAccessibilityMetadata(diagnosticControls.OfType<TextBox>().Single()));
+        var diagnosticLog = diagnosticControls.OfType<TextBox>().Single(control => control.AccessibleName == "Diagnostic log");
+        var diagnosticActions = diagnosticControls.OfType<FlowLayoutPanel>().Single(control => control.AccessibleName == "Diagnostic actions");
+        Check("Diagnostics uses a resizable wrapped layout without horizontal log scrolling",
+            diagnosticControls.OfType<SplitContainer>().Count() == 1 &&
+            diagnosticActions.WrapContents &&
+            diagnosticLog.WordWrap &&
+            diagnosticLog.ScrollBars == ScrollBars.Vertical &&
+            diagnosticControls.OfType<Label>().Single(label => label.AccessibleName == "Experimental adapter notice").AutoEllipsis);
 
-        CheckCommandBarLayout(new Size(900, 600));
-        CheckCommandBarLayout(new Size(1280, 800));
+        CheckCommandBarLayout(ScaleSize(new Size(760, 520), nativeDpi));
+        CheckCommandBarLayout(ScaleSize(new Size(900, 600), nativeDpi));
+        CheckCommandBarLayout(ScaleSize(new Size(1100, 600), nativeDpi));
 
         var workflow = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "Workflow");
         var workflowControls = Descendants(workflow).ToArray();
@@ -212,11 +302,10 @@ public static class UiReleaseSelfTest
             form.Size = size;
             form.PerformLayout();
             toolStrip.PerformLayout();
+            statusStrip.PerformLayout();
 
             var required = new (string Name, ToolStripItem Item)[]
             {
-                ("Profile", toolStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Profile")),
-                ("Profile selector", toolStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Active workflow profile")),
                 ("State", toolStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Operating state")),
                 ("Run Once", runOnce),
                 ("Stop", stop),
@@ -236,17 +325,23 @@ public static class UiReleaseSelfTest
                 .All(pair => !pair.item.Bounds.IntersectsWith(pair.other.Bounds));
             var buttons = items.Where(item => item is ToolStripButton or ToolStripDropDownButton);
             var textFits = buttons.All(item => item.Bounds.Width >= item.GetPreferredSize(Size.Empty).Width);
-            var selector = (ToolStripComboBox)required.Single(entry => entry.Name == "Profile selector").Item;
+            var selector = (ToolStripComboBox)toolStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Active workflow profile");
             var selectorTextWidth = TextRenderer.MeasureText(
                 selector.Text,
                 selector.Font,
                 Size.Empty,
                 TextFormatFlags.NoPadding).Width + SystemInformation.VerticalScrollBarWidth + Scale(12, nativeDpi);
-            var selectorTextFits = selector.Bounds.Width >= selectorTextWidth;
+            var selectorReachable = selector.Available && selector.Placement is ToolStripItemPlacement.Main or ToolStripItemPlacement.Overflow;
+            var selectorTextFits = selector.Placement != ToolStripItemPlacement.Main || selector.Bounds.Width >= selectorTextWidth;
             var moreOnMainBar = more.Available &&
                 more.Placement == ToolStripItemPlacement.Main &&
                 !more.IsOnOverflow &&
                 more.Alignment == ToolStripItemAlignment.Left;
+            var summary = statusStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Status summary");
+            var policyStatus = statusStrip.Items.Cast<ToolStripItem>().Single(item => item.AccessibleName == "Policy status");
+            var statusContained = statusStrip.ClientRectangle.Contains(summary.Bounds) &&
+                statusStrip.ClientRectangle.Contains(policyStatus.Bounds);
+            var statusSeparated = !summary.Bounds.IntersectsWith(policyStatus.Bounds);
             var logicalSize = new Size(Scale(size.Width, 96, nativeDpi), Scale(size.Height, 96, nativeDpi));
             var sizeName = $"{size.Width}x{size.Height} physical / {logicalSize.Width}x{logicalSize.Height} logical at {nativeDpi} DPI";
             var geometry = $"strip {toolStrip.ClientSize.Width}px; " + string.Join(", ", required.Select(entry =>
@@ -257,8 +352,13 @@ public static class UiReleaseSelfTest
             Check($"Command bar essentials are contained at {sizeName}", containedBounds);
             Check($"Command bar essentials do not intersect at {sizeName}", doNotIntersect);
             Check($"Command button text is not clipped at {sizeName}", textFits);
+            Check($"Command bar receives a DPI-scaled content height at {sizeName}",
+                !toolStrip.AutoSize && toolStrip.Height >= Scale(40, nativeDpi));
+            Check($"Profile selector remains reachable at {sizeName}", selectorReachable);
             Check($"Profile selection text is not clipped at {sizeName}", selectorTextFits);
             Check($"More remains on the main command bar at {sizeName}", moreOnMainBar);
+            Check($"Status summary and policy are contained at {sizeName}", statusContained);
+            Check($"Status summary and policy do not overlap at {sizeName}", statusSeparated);
         }
     }
 
@@ -267,6 +367,9 @@ public static class UiReleaseSelfTest
         !string.IsNullOrWhiteSpace(control.AccessibleDescription);
 
     private static int Scale(int value, int dpi) => Scale(value, dpi, 96);
+
+    private static Size ScaleSize(Size value, int dpi) =>
+        new(Scale(value.Width, dpi), Scale(value.Height, dpi));
 
     private static int Scale(int value, int numerator, int denominator) =>
         (int)Math.Round(value * (double)numerator / denominator);

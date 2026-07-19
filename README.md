@@ -32,8 +32,9 @@ connection, private data, or development toolchain.
 |---|---|
 | Package | Self-contained Windows x64 ZIP; unsigned Preview, not an installer |
 | Tested OS | Windows 11 Pro x64 version 10.0.26200 build 26200 |
-| Packaged suite | 174/174 passed, 0 failed, including 17/17 command-cancellation tests |
-| Full regression | 295/295 passed, 0 failed |
+| Packaged Preview offline application suite | 203/203 passed, 0 failed, executed by the packaged `DcsWatcherV2.exe` |
+| Command-cancellation subset | 17/17 passed, 0 failed; included within the 203 application checks, not additional |
+| Stage 3 provenance and intake regression suite | 295/295 passed, 0 failed; separate runner exercised the packaged intake executable |
 | Demo path | Isolated bundled synthetic fixtures and a non-actionable in-memory local test sink only |
 | Live adapters | Experimental live adapters are unsupported, excluded from the judge path, and not part of the demo |
 | Support | Use [GitHub Issues](https://github.com/Jukebox31b/watcher-preview/issues) once the public repository is available; no response-time commitment is made for this Preview |
@@ -59,9 +60,10 @@ reliability.
 `WatcherPreview-win-x64.release-summary.json` is the authoritative,
 separately published release identity record. It binds the source commit and
 source-tree SHA-256 to the ZIP, manifest, and packaged binary SHA-256 values;
-the 174/174 packaged-suite evidence, including 17/17 command-cancellation
-tests; the 295/295 full-regression evidence; the packaged intake executable
-SHA-256; and zero fault counters.
+the 203/203 packaged Preview offline application evidence; its included 17/17
+command-cancellation subset; the separate 295/295 Stage 3 provenance and intake
+regression evidence; the packaged intake executable SHA-256; and zero fault
+counters.
 
 The release summary is not one of the hashed inputs whose identities it
 records. Publishing that record separately therefore does not recursively
