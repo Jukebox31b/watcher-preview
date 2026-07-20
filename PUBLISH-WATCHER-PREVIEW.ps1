@@ -537,7 +537,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $repoRoot "RUN-WATCHER-PREVIEW.cmd") -Destination $outputRoot
     $docsOutput = Join-Path $outputRoot "docs"
     New-Item -ItemType Directory -Path $docsOutput -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $repoRoot "docs\watcher-release\PUBLIC_README.md") -Destination (Join-Path $outputRoot "README.md")
+    Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $outputRoot "README.md")
     foreach ($document in @("RELEASE_PACKAGING.md", "PRIVACY.md", "SECURITY.md", "SUPPORT_MATRIX.md", "UNSIGNED_PREVIEW_NOTICE.md")) {
         Copy-Item -LiteralPath (Join-Path $repoRoot "docs\watcher-release\$document") -Destination $docsOutput
     }
