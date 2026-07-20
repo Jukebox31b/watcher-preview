@@ -7,10 +7,10 @@
     <Nullable>enable</Nullable>
     <RootNamespace>DcsWatcherV2</RootNamespace>
     <AssemblyName>DcsWatcherV2</AssemblyName>
-    <Version>0.1.0-preview.2</Version>
+    <Version>0.1.0-preview.3</Version>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
     <FileVersion>0.1.0.0</FileVersion>
-    <InformationalVersion>0.1.0-preview.2</InformationalVersion>
+    <InformationalVersion>0.1.0-preview.3</InformationalVersion>
     <Product>Watcher Preview</Product>
     <Description>Preview build of the Watcher Windows desktop application.</Description>
     <Authors>Watcher contributors</Authors>

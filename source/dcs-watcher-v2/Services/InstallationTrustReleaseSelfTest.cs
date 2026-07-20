@@ -200,7 +200,10 @@ task_id: SC-STAGE3-20260716-170000
 source_report: CGPT-REPORT-20260716-170000-stage3-offline-fixture.md
 <<<END_DCS_CODEX_TASK_V1>>>
 """;
-        foreach (var candidate in new[] { envelope, envelope.Replace("\n", "\r\n", StringComparison.Ordinal) })
+        var lfEnvelope = envelope
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\r", "\n", StringComparison.Ordinal);
+        foreach (var candidate in new[] { lfEnvelope, lfEnvelope.Replace("\n", "\r\n", StringComparison.Ordinal) })
         {
             if (!BranchLineageSafetyService.ReadField(candidate, "task_id").Equals(taskId, StringComparison.Ordinal) ||
                 !BranchLineageSafetyService.ReadField(candidate, "source_report").Equals(Stage3RegressionFixture.SourceReport, StringComparison.Ordinal))
